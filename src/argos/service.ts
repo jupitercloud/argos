@@ -147,6 +147,7 @@ export class ArgosService {
     const { crawlId } = crawlJob.config;
     const configPath = path.join(this._config.cwd, crawlId + "-config.yaml");
     let error: Error | null = null;
+    let crawler: Crawler | null = null;
     try {
       fs.writeFileSync(configPath, yaml.dump(crawlJob.config), {
         encoding: "utf8",
@@ -157,7 +158,7 @@ export class ArgosService {
         false,
         false,
       );
-      const crawler = new Crawler(
+      crawler = new Crawler(
         args.parsed,
         args.origConfig,
         this._crawlSupport,
@@ -167,8 +168,7 @@ export class ArgosService {
       // 2. Clean up redis after use
       await crawler
         .resetCrawlState()
-        .then(() => crawler.run())
-        .finally(() => crawler.resetCrawlState());
+        .then(() => crawler?.run())
       await this._uploadArtifacts(crawler, configPath);
     } catch (_error) {
       error = _error as Error;
@@ -176,6 +176,9 @@ export class ArgosService {
       if (fs.existsSync(configPath)) {
         fs.unlinkSync(configPath);
       }
+      await crawler?.resetCrawlState().catch(error => {
+        logger.error("Failed to reset crawl state", { error });
+      })
     }
     if (error) {
       return this._failCrawl(crawlJob, error as Error);
